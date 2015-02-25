@@ -2,13 +2,11 @@ module Lrt where
 import Data.Monoid as Monoid
 import Data.Maybe as Maybe
 
-data Lrt a = Inc a [Lrt a]
+data Lrt a = Root [Lrt a]
+           | Inc a [Lrt a]
            | Exc a (Lrt a)
            | Nil
            deriving (Eq, Show)
-
-(*) a bs = Inc a bs
-(!) a b = Exc a b
 
 vertex (Inc a _) = Just a
 vertex (Exc a _) = Just a
@@ -21,8 +19,6 @@ children _ = Nil
 childVertices (Inc _ bs) = catMaybes (map vertex bs)
 childVertices (Exc _ b) = catMaybes [vertex b]
 childVertices Nil = []
-
-data EdgeLabel = Star | Bang deriving (Eq, Show)
 
 subgraph Nil _ = False
 subgraph (Inc la lbs) (Inc ra rbs) = 
@@ -37,9 +33,8 @@ subgraph (Exc la lb) (Exc ra rb) = la == ra && lb `subgraph` rb
 subgraph (Exc la lb) (Inc ra rbs) = la == ra
 subgraph (Inc _ _) (Exc _ _) = False
 
-lub :: Lrt a -> Lrt a -> Lrt a
-glb :: Lrt a -> Lrt a -> Lrt a
-add :: Lrt a -> Lrt a -> Lrt a
+leastUpper :: Lrt a -> Lrt a -> Lrt a
+greatestLower :: Monoid a => Lrt a -> Lrt a -> Lrt a
 
 instance Eq a => Ord (Lrt a) where
   (<=) l r = r `subgraph` l
@@ -49,10 +44,11 @@ instance Functor Lrt where
   fmap f (Exc a b) = Exc (f a) (fmap f b)
   fmap f (Inc a bs) = Inc (f a) (map (fmap f) bs)
 
+--ideally, we could provide a function from merges to annonymous monoid instances
 instance Monoid Lrt where
   mempty = Nil
-  mconcat ts = foldl merge ts
-  mappend l r = merge l r
+  mconcat ts = foldl greatestLower ts
+  mappend l r = greatestLower l r
 
 --implicitly, all Lrts of type a have a common root via type-compatibility.
 --the trees, we can infer, belong in the same class of propositions because 
@@ -67,5 +63,4 @@ instance Monad Lrt where
   (>>=) :: (Exc a b) f = mconcat (f a):(map f bs)
   (>>=) :: Nil f = Nil
   return a = Inc a []
-
 
