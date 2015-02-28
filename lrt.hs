@@ -1,9 +1,6 @@
 module Lrt where
 import Data.Monoid as Monoid
 import Data.Maybe as Maybe
-import qualified Data.Map as Map
-
-type Map k v = Map.Map k v
 
 data Node a = Root -- used in the top level of the tree
             | Vertex a deriving (Eq, Show)
@@ -12,7 +9,7 @@ instance Functor Node where
   fmap f (Vertex a) = Vertex $ f a
   fmap f Root = Root
 
-data Lrt a = Inc (Node a) (Map a (Lrt a))
+data Lrt a = Inc (Node a) [(a, (Lrt a))]
            | Exc (Node a) (Lrt a)
            | Nil
            deriving (Eq, Show)
@@ -27,9 +24,9 @@ vertex _ = Nothing
 
 children (Inc _ bs) = bs
 children (Exc _ b) = case vertex b of
-  Just v -> Map.singleton v b
-  Nothing -> Map.empty
-children _ = Map.empty
+  Just v -> [(v, b)]
+  Nothing -> []
+children _ = []
 
 -- We define a partial ordering by specificity for propositional trees:
 -- we say for two trees a and b, a <= b iff:
@@ -45,14 +42,14 @@ children _ = Map.empty
 instance (Ord a) => Ord (Lrt a) where
   (<=) Nil _ = True
   (<=) (Inc la lbs) (Inc ra rbs) =
-    la == ra && all (\ (_, t) -> isJust $ t `subgraphLookup` lbs) (Map.toList rbs)
+    la == ra && all (\ (_, t) -> isJust $ t `subgraphLookup` lbs) rbs
   (<=) (Exc la lb) (Exc ra rb) = la == ra && rb <= lb
   (<=) (Exc la lb) (Inc ra rbs) = la == ra && (isJust $ lb `subgraphLookup` rbs)
   (<=) (Inc _ _) (Exc _ _) = False
 
 subgraphLookup t bs = 
   vertex t >>= \ v ->
-    Map.lookup v bs >>= \ b ->
+    lookup v bs >>= \ b ->
       if t <= b
       then Just b
       else Nothing
@@ -74,15 +71,15 @@ subgraphLookup t bs =
 compatible Nil Nil = True
 compatible Nil _ = False
 compatible (Inc la lbs) (Inc ra rbs) = 
-  la /= rb || all (\ (_, t) -> compAux t rbs) $ Map.toList lbs
+  la /= ra || all (\ (_, t) -> compAux t rbs) lbs
   where compAux t bs = case t `subgraphLookup` bs of
-    Just match -> t `compatible` match
-    Nothing -> True
-compatible (Exc la lb) (Inc ra rbs) = la /= ra || not divergence
-  where divergence = case rbs of 
-          [] -> False
-          [rb] -> node lb == node rb && not $ compatible lb rb
-          _ -> True
+          Just match -> t `compatible` match
+          Nothing -> True
+compatible (Exc la lb) (Inc ra rbs) = la /= ra || treesConverge
+  where treesConverge = case rbs of 
+          [] -> True
+          [(_, rb)] -> node lb == node rb || compatible lb rb
+          _ -> False
 compatible (Exc la lb) (Exc ra rb) = la /= ra || lb `compatible` rb
 compatible l r = r `compatible` r
 
@@ -105,7 +102,8 @@ leastUpper lhs rhs = lhs
 instance Functor Lrt where
   fmap f Nil = Nil
   fmap f (Exc a b) = Exc (fmap f a) (fmap f b)
-  fmap f (Inc a bs) = Inc (fmap f a) (map (fmap f) bs)
+  fmap f (Inc a bs) =
+    Inc (fmap f a) (map (\ (k, v) -> (f k, (fmap f v))) bs)
 
 instance Monoid (Lrt a) where
   mempty = Inc Root []
