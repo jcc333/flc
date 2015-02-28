@@ -1,4 +1,5 @@
 module Lrt where
+import Data.List as List
 import Data.Monoid as Monoid
 import Data.Maybe as Maybe
 
@@ -9,7 +10,7 @@ instance Functor Node where
   fmap f (Vertex a) = Vertex $ f a
   fmap f Root = Root
 
-data Lrt a = Inc (Node a) [(a, (Lrt a))]
+data Lrt a = Inc (Node a) [Lrt a]
            | Exc (Node a) (Lrt a)
            | Nil
            deriving (Eq, Show)
@@ -23,9 +24,7 @@ vertex (Exc (Vertex a) _) = Just a
 vertex _ = Nothing
 
 children (Inc _ bs) = bs
-children (Exc _ b) = case vertex b of
-  Just v -> [(v, b)]
-  Nothing -> []
+children (Exc _ b) = [b]
 children _ = []
 
 -- We define a partial ordering by specificity for propositional trees:
@@ -42,17 +41,18 @@ children _ = []
 instance (Ord a) => Ord (Lrt a) where
   (<=) Nil _ = True
   (<=) (Inc la lbs) (Inc ra rbs) =
-    la == ra && all (\ (_, t) -> isJust $ t `subgraphLookup` lbs) rbs
+    la == ra && all (\ t -> isJust $ subgraphLookup t lbs) rbs
   (<=) (Exc la lb) (Exc ra rb) = la == ra && rb <= lb
-  (<=) (Exc la lb) (Inc ra rbs) = la == ra && (isJust $ lb `subgraphLookup` rbs)
+  (<=) (Exc la lb) (Inc ra rbs) = la == ra && (isJust $ subgraphLookup lb rbs)
   (<=) (Inc _ _) (Exc _ _) = False
 
 subgraphLookup t bs = 
   vertex t >>= \ v ->
-    lookup v bs >>= \ b ->
+    List.find (vertexEq v) bs >>= \ b ->
       if t <= b
       then Just b
       else Nothing
+  where vertexEq v t = vertex t == Just v
 
 -- two trees are compatible automatically if they diverge at the top level:
 --  they can't interfere with one another because forall vertices later, their
@@ -71,14 +71,14 @@ subgraphLookup t bs =
 compatible Nil Nil = True
 compatible Nil _ = False
 compatible (Inc la lbs) (Inc ra rbs) = 
-  la /= ra || all (\ (_, t) -> compAux t rbs) lbs
+  la /= ra || all (\ t -> compAux t rbs) lbs
   where compAux t bs = case t `subgraphLookup` bs of
           Just match -> t `compatible` match
           Nothing -> True
 compatible (Exc la lb) (Inc ra rbs) = la /= ra || treesConverge
   where treesConverge = case rbs of 
           [] -> True
-          [(_, rb)] -> node lb == node rb || compatible lb rb
+          [rb] -> node lb == node rb || compatible lb rb
           _ -> False
 compatible (Exc la lb) (Exc ra rb) = la /= ra || lb `compatible` rb
 compatible l r = r `compatible` r
@@ -101,9 +101,8 @@ leastUpper lhs rhs = lhs
 
 instance Functor Lrt where
   fmap f Nil = Nil
-  fmap f (Exc a b) = Exc (fmap f a) (fmap f b)
-  fmap f (Inc a bs) =
-    Inc (fmap f a) (map (\ (k, v) -> (f k, (fmap f v))) bs)
+  fmap f (Exc a b) = Exc (fmap f a) $ fmap f b
+  fmap f (Inc a bs) = Inc (fmap f a) $ fmap (fmap f) bs
 
 instance Monoid (Lrt a) where
   mempty = Inc Root []
