@@ -57,6 +57,35 @@ subgraphLookup t bs =
       then Just b
       else Nothing
 
+-- two trees are compatible automatically if they diverge at the top level:
+--  they can't interfere with one another because forall vertices later, their
+--  signatures concretely diverge at the nodes in question. That is, they don't
+--  have equal vertices here, and the signatures include the vertices here, so
+--  the signatures cannot be equal.
+-- two trees are only incompatible if either:
+--  1) one or them is Nil
+--  2) their children are incompatible
+--  3) they diverge at the node:
+--      in two exclusive nodes with matching vertices:
+--        a) the signature ends here, no conflict
+--        b) the signatures continue, but are compatible here
+--           so we test the subtrees for incompatibilities
+--        c) the signatures diverge here
+compatible Nil Nil = True
+compatible Nil _ = False
+compatible (Inc la lbs) (Inc ra rbs) = 
+  la /= rb || all (\ (_, t) -> compAux t rbs) $ Map.toList lbs
+  where compAux t bs = case t `subgraphLookup` bs of
+    Just match -> t `compatible` match
+    Nothing -> True
+compatible (Exc la lb) (Inc ra rbs) = la /= ra || not divergence
+  where divergence = case rbs of 
+          [] -> False
+          [rb] -> node lb == node rb && not $ compatible lb rb
+          _ -> True
+compatible (Exc la lb) (Exc ra rb) = la /= ra || lb `compatible` rb
+compatible l r = r `compatible` r
+
 greatestLower :: Lrt a -> Lrt a -> Lrt a
 greatestLower lhs rhs = lhs
   {-case (lhs, rhs) of
