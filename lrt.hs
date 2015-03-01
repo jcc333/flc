@@ -81,28 +81,32 @@ compatible (Exc la lb) (Inc ra rbs) = la /= ra || treesConverge
           [rb] -> node lb == node rb || compatible lb rb
           _ -> False
 compatible (Exc la lb) (Exc ra rb) = la /= ra || lb `compatible` rb
-compatible l r = r `compatible` r
+compatible l r = 
+  if r `compatible` r 
+  then case (l, r) of
+    (Inc la lbs) (Inc ra rbs) -> 
+    (Exc la lb)  (Inc ra rbs) -> 
+    (Inc la lbs) (Exc ra rb)  -> 
+    (Exc la lb)  (Exc ra rb)  -> 
+  else Nil
 
 greatestLower :: Lrt a -> Lrt a -> Lrt a
-greatestLower lhs rhs = lhs
-  {-case (lhs, rhs) of
-    (Inc a lbs,  Inc a rbs) -> Inc a lbs ++ rbs
-    (Inc la lbs, Inc ra rbs) -> 
-    (Exc la lb,  Inc ra rbs) -> 
-    (Inc la lbs, Exc ra rb)  -> 
-    (Exc la lb,  Exc ra rbs  -> 
-  where lesserEdge (Inc a [b]) (Exc a b) = Just $ Exc a b
-        lesserEdge (Exc a b) (Inc a [b]) = Just $ Exc a b
-        lesserEdge (Exc a b) (Exc a b) = Just $ Exc a b
-        lesserEdge _ _ = Nothing-}
+greatestLower l r =
+  if r `compatible` r 
+  then case (l, r) of
+    (Inc la lbs) (Inc ra rbs) -> 
+    (Exc la lb)  (Inc ra rbs) -> 
+    (Inc la lbs) (Exc ra rb)  -> 
+    (Exc la lb)  (Exc ra rb)  -> 
+  else Nil
 
 leastUpper :: Lrt a -> Lrt a -> Lrt a
 leastUpper lhs rhs = lhs
 
 instance Functor Lrt where
   fmap f Nil = Nil
-  fmap f (Exc a b) = Exc (fmap f a) $ fmap f b
-  fmap f (Inc a bs) = Inc (fmap f a) $ fmap (fmap f) bs
+  fmap f (Exc a b) = Exc (fmap f a) $ (fmap f) b
+  fmap f (Inc a bs) = Inc (fmap f a) $ map (fmap f) bs
 
 instance Monoid (Lrt a) where
   mempty = Inc Root []
@@ -110,9 +114,9 @@ instance Monoid (Lrt a) where
   mappend = greatestLower
   {-
 instance Monad Lrt where
-  (>>=) (Inc Root bs) f = mconcat $ map (fmap f) bs
+  (>>=) (Inc Root bs) f = flatten $ map (fmap f) bs
   (>>=) (Inc (Vertex a) bs) f = mconcat $ (f a):(map (fmap f) (children a))
-  (>>=) (Exc Root b) f = Root f b 
+  (>>=) (Exc Root b) f = Exc Root $ f b 
   (>>=) (Exc (Vertex a) b) f = mappend (f a) (fmap f b)
   (>>=) Nil f = Nil
   return a = Inc (Vertex a) []-}
