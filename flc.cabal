@@ -53,5 +53,5 @@ executable flc
   -- other-modules:       
   
   -- Other library packages from which modules are imported.
-  build-depends:       parsec, containers, base ==4.6.*
+  build-depends:       parsec, containers, base
   
