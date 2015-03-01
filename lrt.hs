@@ -89,18 +89,34 @@ compatible l r = r `compatible` l
 --  and that they share a label
 greatestLower l r =
   if r `compatible` r && all ((== Just Root) . node) [l, r]
-  then merge l r
+  then glMerge l r
   else Nil
 
-merge Nil _ = Nil
-merge (Inc l lbs) (Inc _ rbs) =
+glMerge Nil _ = Nil
+glMerge (Inc l lbs) (Inc _ rbs) =
   let (matches, unmatches) = labelMatches lbs rbs
-      merged = map (\ (a, b) -> merge a b) matches
+      merged = map (\ (a, b) -> glMerge a b) matches
   in Inc l $ unmatches ++ merged
-merge (Exc l lb) (Inc _ [rb]) = Exc l $ merge lb rb
-merge (Inc l [lb]) (Exc _ rb) = Exc l $ merge lb rb
-merge (Exc l lb) (Exc  _ rb) = Exc l $ merge lb rb
-merge (Inc l []) (Exc _ rb) = Exc l rb
+glMerge (Exc l lb) (Inc _ [rb]) = Exc l $ glMerge lb rb
+glMerge (Inc l [lb]) (Exc _ rb) = Exc l $ glMerge lb rb
+glMerge (Exc l lb) (Exc  _ rb) = Exc l $ glMerge lb rb
+glMerge (Inc l []) (Exc _ rb) = Exc l rb
+
+leastUpper l r = 
+  if r `compatible` r && all ((== Just Root) . node) [l, r]
+  then luMerge l r
+  else Nil
+
+luMerge Nil r = r
+luMerge (Inc l lbs) (Inc _ rbs) =
+  let (matches, unmatches) = labelMatches lbs rbs
+      merged = map (\ (a, b) -> luMerge a b) matches
+  in Inc l $ merged
+luMerge (Exc l lb) (Inc _ [rb]) = Inc l $ [luMerge lb rb]
+luMerge (Inc l [lb]) (Exc _ rb) = Inc l $ [luMerge lb rb]
+luMerge (Exc l lb) (Exc  _ rb) = Exc l $ luMerge lb rb
+luMerge (Inc l []) (Exc _ rb) = Inc l []
+
 
 labelMatches lbs rbs =
   labelMatchesAux lbs rbs ([], [])
@@ -122,8 +138,6 @@ branchMatch t bs = branchMatchAux t bs []
           then Just (bh, seen ++ bt)
           else branchMatchAux t bt $ bh:seen
 
-leastUpper :: Lrt a -> Lrt a -> Lrt a
-leastUpper lhs rhs = lhs
 
 instance Functor Lrt where
   fmap f Nil = Nil
