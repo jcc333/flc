@@ -81,38 +81,64 @@ compatible (Exc la lb) (Inc ra rbs) = la /= ra || treesConverge
           [rb] -> node lb == node rb || compatible lb rb
           _ -> False
 compatible (Exc la lb) (Exc ra rb) = la /= ra || lb `compatible` rb
-compatible l r = r `compatible` r
+compatible l r = r `compatible` l
 
-greatestLower :: Lrt a -> Lrt a -> Lrt a
-greatestLower lhs rhs = lhs
-  {-case (lhs, rhs) of
-    (Inc a lbs,  Inc a rbs) -> Inc a lbs ++ rbs
-    (Inc la lbs, Inc ra rbs) -> 
-    (Exc la lb,  Inc ra rbs) -> 
-    (Inc la lbs, Exc ra rb)  -> 
-    (Exc la lb,  Exc ra rbs  -> 
-  where lesserEdge (Inc a [b]) (Exc a b) = Just $ Exc a b
-        lesserEdge (Exc a b) (Inc a [b]) = Just $ Exc a b
-        lesserEdge (Exc a b) (Exc a b) = Just $ Exc a b
-        lesserEdge _ _ = Nothing-}
+-- These merge functions are not guaranteed correct unless called from 
+--  'merge' or 'greatestLower'.
+-- They assume that the two branches in question are compatible and correctly rooted
+--  and that they share a label
+greatestLower l r =
+  if r `compatible` r && all ((== Just Root) . node) [l, r]
+  then merge l r
+  else Nil
+
+merge Nil _ = Nil
+merge (Inc l lbs) (Inc _ rbs) =
+  let (matches, unmatches) = labelMatches lbs rbs
+      merged = map (\ (a, b) -> merge a b) matches
+  in Inc l $ unmatches ++ merged
+merge (Exc l lb) (Inc _ [rb]) = Exc l $ merge lb rb
+merge (Inc l [lb]) (Exc _ rb) = Exc l $ merge lb rb
+merge (Exc l lb) (Exc  _ rb) = Exc l $ merge lb rb
+merge (Inc l []) (Exc _ rb) = Exc l rb
+
+labelMatches lbs rbs =
+  labelMatchesAux lbs rbs ([], [])
+  where labelMatchesAux lbs rbs (matchAcc, unAcc) =
+          case (lbs, rbs) of
+            ([], []) -> (matchAcc, unAcc)
+            ([], rrem) -> (matchAcc, unAcc ++ rrem)
+            (lrem, []) -> (matchAcc, unAcc ++ lrem)
+            (lh:lt, rs) ->
+              case branchMatch lh rs of
+                Just (match, newRs) -> 
+                  labelMatchesAux lt newRs ((lh, match) : matchAcc, unAcc)
+                Nothing -> labelMatchesAux lt rs (matchAcc, lh:unAcc)
+
+branchMatch t bs = branchMatchAux t bs [] 
+  where branchMatchAux t [] _ = Nothing
+        branchMatchAux t (bh:bt) seen = 
+          if node t == node bh
+          then Just (bh, seen ++ bt)
+          else branchMatchAux t bt $ bh:seen
 
 leastUpper :: Lrt a -> Lrt a -> Lrt a
 leastUpper lhs rhs = lhs
 
 instance Functor Lrt where
   fmap f Nil = Nil
-  fmap f (Exc a b) = Exc (fmap f a) $ fmap f b
-  fmap f (Inc a bs) = Inc (fmap f a) $ fmap (fmap f) bs
+  fmap f (Exc a b) = Exc (fmap f a) $ (fmap f) b
+  fmap f (Inc a bs) = Inc (fmap f a) $ map (fmap f) bs
 
-instance Monoid (Lrt a) where
+instance (Ord a) => Monoid (Lrt a) where
   mempty = Inc Root []
   mconcat = foldl mappend mempty
   mappend = greatestLower
   {-
 instance Monad Lrt where
-  (>>=) (Inc Root bs) f = mconcat $ map (fmap f) bs
+  (>>=) (Inc Root bs) f = flatten $ map (fmap f) bs
   (>>=) (Inc (Vertex a) bs) f = mconcat $ (f a):(map (fmap f) (children a))
-  (>>=) (Exc Root b) f = Root f b 
+  (>>=) (Exc Root b) f = Exc Root $ f b 
   (>>=) (Exc (Vertex a) b) f = mappend (f a) (fmap f b)
   (>>=) Nil f = Nil
   return a = Inc (Vertex a) []-}
