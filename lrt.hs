@@ -138,7 +138,6 @@ branchMatch t bs = branchMatchAux t bs []
           then Just (bh, seen ++ bt)
           else branchMatchAux t bt $ bh:seen
 
-
 instance Functor Lrt where
   fmap f Nil = Nil
   fmap f (Exc a b) = Exc (fmap f a) $ (fmap f) b
@@ -148,11 +147,31 @@ instance (Ord a) => Monoid (Lrt a) where
   mempty = Inc Root []
   mconcat = foldl mappend mempty
   mappend = greatestLower
-  {-
-instance Monad Lrt where
+
+{-instance Monad Lrt where
   (>>=) (Inc Root bs) f = flatten $ map (fmap f) bs
   (>>=) (Inc (Vertex a) bs) f = mconcat $ (f a):(map (fmap f) (children a))
   (>>=) (Exc Root b) f = Exc Root $ f b 
   (>>=) (Exc (Vertex a) b) f = mappend (f a) (fmap f b)
   (>>=) Nil f = Nil
-  return a = Inc (Vertex a) []-}
+  return a = Inc (Vertex a) []
+flatten :: Lrt (Lrt a) -> Lrt a
+flatten Nil = Nil
+flatten (Inc Root []) = Inc Root []
+flatten (Exc t b) =-}
+
+childrenSat env bs = all (\ t -> any (\ c -> c `sat` t) $ children env) bs
+
+sat Nil Nil = True
+sat Nil _ = False
+
+sat env (Inc Root []) = True
+
+sat env (Inc Root bs) = childrenSat env bs
+
+sat env (Inc vert bs) = node env == Just vert && childrenSat env bs
+
+sat (Exc Root lb) (Exc Root rb) = lb `sat` rb
+sat (Exc lv lb) (Exc rv rb) = lv == rv && lb `sat` rb
+
+sat _ _ = False

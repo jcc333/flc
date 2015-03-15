@@ -12,7 +12,7 @@ data Env = Env Tree (Map Tree (Set Tree))
 -- on one hand, we can just let the user do whatever and end up with a lot of Nils,
 -- on the other, this might be overly-protective.
 -- TODO: The solution, I guess, is actually to include `valid`, to determine validibility
--- alongside `assert`, which blid-fires, more or less, and `safeAssert`, to assert iff valid
+-- alongside `assert`, which blind-fires, more or less, and `safeAssert`, to assert iff valid
 -- Alternatively: See if implicature invalidates the whole tree, and if so, error. Else, go for it.
 merge env@(Env et rs) t = 
   if valid t et
@@ -97,7 +97,7 @@ class Eval a where
 
 ?- assert Alice.from.Texas //TODO: Add whitespace-insensitive identifiers (trim whitespace from either end)
 
-?- assert Alice.from.Austin
+?- assert Alice.from:Austin
 
 ?- assert Alice.from.6th street : False //creates an LRT terminating in Nil
 
