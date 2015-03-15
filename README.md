@@ -19,3 +19,67 @@ Exclusion Logic in Haskell
 - Now, dealing with a larger LRT composed of multiple assertions like that, we get vertices which are connected to nothing (leaves), those which are linked via `!` (exclusive nodes), and those which are linked via `.`.
 - In haskell, it's easy to represent the collections of edges with lists from the inclusive node to its neighbors, and as a single neighbor for exclusive nodes
 - This is just meant to be an in-memory reference implementation for testing purposes later on: I don't aim to be fast, and I don't aim to be clever here; just straightforward as possible
+
+Example session of FLC
+======================
+// starting with a kb with no contents
+
+?- assert Alice . sex : female & Bob . sex : male
+
+//now the tree looks something like: T -.> Alice -.> sex -:> female
+//                                     -.> Bob   -.> sex -:> male
+
+?- Alice . sex
+
+  female
+
+//for simple queries in which a partial signature is given, we iterate over the bag of results
+
+?- Alice.sex:female
+
+  T
+
+?- Alice.sex:male
+  F
+//F, since we can see that Alice has an exclusive edge to sex:female
+
+?- assert Alce.sex:male //F, since we can see that Alice has an exclusive edge to sex:female
+  
+  F
+
+?- assert sex:male -> chromosomes.y : T
+
+  T
+
+?- Alice.chromosomes : y
+
+  F
+
+?- Bob.chromosomes.y
+
+  Bob.chromosomes:y : T
+
+?- Bob.chromosomes:y
+ 
+  T
+
+?- assert Alice.from.Texas //TODO: Add whitespace-insensitive identifiers (trim whitespace from either end)
+
+?- assert Alice.from:Austin
+
+?- assert Alice.from.6th street : False //creates an LRT terminating in Nil
+
+?- all Alice . from //TODO: Add 'all' keyword
+
+Texas : T
+Austin : T
+6th street : T
+6th street : F
+
+?- assert "http://thing.with.dots.in.text" . web addresss
+
+  T
+
+?- "http://thing.with.dots.in.text" . web addresss
+
+  T
