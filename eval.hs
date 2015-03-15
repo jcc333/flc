@@ -5,8 +5,19 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 
 type Tree = Lrt String
+type Map = Map.Map
+type Set = Set.Set
 
-data Env = Env Tree (Map Tree (Set Tree))
+data Env = { facts :: Tree, rules ::  (Map Tree (Set Tree)) }
+
+eval :: Env -> Stmt -> (Env, Exp)
+--eval takes an environment and a statement and returns the updated environment and the result of the statement (query result, success or failure of an assertion, etc.)
+eval env (Assert exp) = case exp of
+  HoistConj _ -> addFact (facts env) (encode exp)
+  Arrow pred consq -> addRule (encode pred) (encode consq)
+eval env (Query exp) = (facts env) `sat` (encode exp) --T/F for now, will add better query support later
+eval env (All exp) = eval env (Query exp)
+eval env (Retract exp) = removeFact env (encode exp)
 
 -- on the fence about this
 -- on one hand, we can just let the user do whatever and end up with a lot of Nils,
@@ -15,8 +26,8 @@ data Env = Env Tree (Map Tree (Set Tree))
 -- alongside `assert`, which blind-fires, more or less, and `safeAssert`, to assert iff valid
 -- Alternatively: See if implicature invalidates the whole tree, and if so, error. Else, go for it.
 merge env@(Env et rs) t = 
-  if valid t et
-  then (Env (greatestLower et t) rs, Right None)
+  if compatible t et
+  then (Env (greatestLower et t) rs, Right Nothing)
   else (env, Left "Cannot merge invalid trees without data loss\n")
 
 type Result = Either String (Maybe Tree)
@@ -71,11 +82,11 @@ instance Eval Conj where
     HoistTerm t -> assert env t
 
 instance Eval Exp where
-  assert (Env t rules) exp = case exp of
+  assert env@(Env t rules) exp = case exp of
     Arrow predicate consequent -> 
       let predicateTree = encode predicate
-      let consequentTree = encode consequent
-      let updated = Map.adjust (updateRule consequentTree) $ rules
+          consequentTree = encode consequent
+          updated = Map.adjust (updateRule consequentTree) $ rules
       in (Env t updated, Right Nothing)
       where updateRule ct (pt, cts) = (pt, Set.insert cts ct)
     HoistConj c -> assert env c
