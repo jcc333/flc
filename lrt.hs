@@ -84,39 +84,36 @@ compatible (Exc la lb) (Exc ra rb) = la /= ra || lb `compatible` rb
 compatible l r = r `compatible` l
 
 -- These merge functions are not guaranteed correct unless called from 
---  'merge' or 'greatestLower'.
+--  'greatestLower' or 'leastUpper'
 -- They assume that the two branches in question are compatible and correctly rooted
 --  and that they share a label
 greatestLower l r =
   if r `compatible` r && all ((== Just Root) . node) [l, r]
-  then glMerge l r
+  then gl l r
   else Nil
-
-glMerge Nil _ = Nil
-glMerge (Inc l lbs) (Inc _ rbs) =
-  let (matches, unmatches) = labelMatches lbs rbs
-      merged = map (\ (a, b) -> glMerge a b) matches
-  in Inc l $ unmatches ++ merged
-glMerge (Exc l lb) (Inc _ [rb]) = Exc l $ glMerge lb rb
-glMerge (Inc l [lb]) (Exc _ rb) = Exc l $ glMerge lb rb
-glMerge (Exc l lb) (Exc  _ rb) = Exc l $ glMerge lb rb
-glMerge (Inc l []) (Exc _ rb) = Exc l rb
+    where gl Nil _ = Nil
+          gl (Inc l lbs) (Inc _ rbs) =
+            let (matches, unmatches) = labelMatches lbs rbs
+                merged = map (\ (a, b) -> gl a b) matches
+            in Inc l $ unmatches ++ merged
+          gl (Exc l lb) (Inc _ [rb]) = Exc l $ gl lb rb
+          gl (Inc l [lb]) (Exc _ rb) = Exc l $ gl lb rb
+          gl (Exc l lb) (Exc  _ rb) = Exc l $ gl lb rb
+          gl (Inc l []) (Exc _ rb) = Exc l rb
 
 leastUpper l r = 
   if r `compatible` r && all ((== Just Root) . node) [l, r]
-  then luMerge l r
+  then lu l r
   else Nil
-
-luMerge Nil r = r
-luMerge (Inc l lbs) (Inc _ rbs) =
-  let (matches, unmatches) = labelMatches lbs rbs
-      merged = map (\ (a, b) -> luMerge a b) matches
-  in Inc l $ merged
-luMerge (Exc l lb) (Inc _ [rb]) = Inc l $ [luMerge lb rb]
-luMerge (Inc l [lb]) (Exc _ rb) = Inc l $ [luMerge lb rb]
-luMerge (Exc l lb) (Exc  _ rb) = Exc l $ luMerge lb rb
-luMerge (Inc l []) (Exc _ rb) = Inc l []
-
+    where lu Nil r = r
+          lu (Inc l lbs) (Inc _ rbs) =
+            let (matches, unmatches) = labelMatches lbs rbs
+                merged = map (\ (a, b) -> lu a b) matches
+            in Inc l $ merged
+          lu (Exc l lb) (Inc _ [rb]) = Inc l $ [lu lb rb]
+          lu (Inc l [lb]) (Exc _ rb) = Inc l $ [lu lb rb]
+          lu (Exc l lb) (Exc  _ rb) = Exc l $ lu lb rb
+          lu (Inc l []) (Exc _ rb) = Inc l []
 
 labelMatches lbs rbs =
   labelMatchesAux lbs rbs ([], [])
