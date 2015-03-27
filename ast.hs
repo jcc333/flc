@@ -1,8 +1,8 @@
 module Ast where
 
 data Term = Symbol String
-          | Is String Term
           | Dot String Term
+          | Is String Term
           deriving (Eq, Show)
 
 data Conj = HoistTerm Term

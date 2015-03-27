@@ -19,19 +19,6 @@ eval env (Query exp) = (facts env) `sat` (encode exp) --T/F for now, will add be
 eval env (All exp) = eval env (Query exp)
 eval env (Retract exp) = removeFact env (encode exp)
 
--- on the fence about this
--- on one hand, we can just let the user do whatever and end up with a lot of Nils,
--- on the other, this might be overly-protective.
--- TODO: The solution, I guess, is actually to include `valid`, to determine validibility
--- alongside `assert`, which blind-fires, more or less, and `safeAssert`, to assert iff valid
--- Alternatively: See if implicature invalidates the whole tree, and if so, error. Else, go for it.
-merge env@(Env et rs) t = 
-  if compatible t et
-  then (Env (greatestLower et t) rs, Right Nothing)
-  else (env, Left "Cannot merge invalid trees without data loss\n")
-
-type Result = Either String (Maybe Tree)
-
 class ELEncodable a where
   encode :: a -> Tree
 
@@ -65,29 +52,46 @@ instance ELDecodable Conj where
     Exc s branch -> map HoistTerm [Is s t]
     Inc s branches -> map HoistTerm [Dot s b | b <- branches]
 
-class Eval a where
-  assert :: Env -> a -> (Env, Result) --appends the statement's encoding to the environment's lrt. if incompatible, this returns 'Nil', and leaves the environment unchanged
-  --retract :: Env -> a -> (Env, Result) --retracts the statement's encoding from the environment's lrt
-  --overwrite :: Env -> a -> (Env, Result) -- appends the statement's encoding to the environment's lrt. if incompatible, this overwrites the previous branch
-  --query :: Env -> a -> (Env, Result) --tests whether or not the lrt models the proposition
-  --
-instance Eval Term where
-  assert env term =
-    let termTree = encode term
-    in merge env termTree
+eval env (Assert (Arrow pred cons)) =
+  let predTree = encode pred
+      consTree = encode cons
+      consSet = Map.lookup predTree (rules env)
+      postSet = Set.insert consTree consSet
+  in (Env (facts env) Map.insert predTree postSet (rules env), Symbol "T")
+eval env (Assert hoist) =
+  let lrt = encode hoist
+      pre = facts env
+      post = Env (pre `mconcat` lrt) (rules env)
+  in if post == Nil then (env, Nil) else (Env post (rules env), decode lrt)
 
-instance Eval Conj where
-  assert env conj = case conj of
-    c -> merge env $ encode c
-    HoistTerm t -> assert env t
+eval env (Retract (Arrow pred cons)) =
+  let predTree = encode pred
+      consTree = encode cons
+      consSet = Map.lookup predTree (rules env)
+      postSet = Set.delete consTree consSet
+  in (Env (facts env) Map.insert predTree postSet (rules env), Symbol "T")
+eval env (Retract hoist) =
+  (Env post (rules env), lrt)
+  where lrt = encode hoist
+        pre = facts env
+        post = Env (pre `delete` lrt) (rules env) --TODO: define `delete`. it probably has something to do with `findAll`...
 
-instance Eval Exp where
-  assert env@(Env t rules) exp = case exp of
-    Arrow predicate consequent -> 
-      let predicateTree = encode predicate
-          consequentTree = encode consequent
-          updated = Map.adjust (updateRule consequentTree) $ rules
-      in (Env t updated, Right Nothing)
-      where updateRule ct (pt, cts) = (pt, Set.insert cts ct)
-    HoistConj c -> assert env c
+eval env (Query (Arrow pred _)) =
+  let predTree = encode pred
+      contains = Map.member predTree (rules env)
+  in if contains
+     then (env, Inc "T" [])
+     else (env, Nil)
+eval env (Query hoist) = 
+  if (facts env) `sat` (encode hoist)
+  then (env, Inc "T" [])
+  else (env, Nil)
+eval env (All exp) = (env, Inc "throw new UnsupportedOperationException(\"well this is awkward\");" [])
 
+--find :: Lrt a -> Lrt a -> Lrt a 
+find lrt (Symbol s) = --do we have this symbol as a child-node?
+find lrt (Dot s t) = --do we have s as a child-node and can we find t from our s-correspondant?
+find lrt (Is s t) = --do we have s as a child-node and can we find t from our s-correspondant?
+
+--delete :: Lrt a -> Lrt a -> Lrt a
+delete env term = --similar to find, but we keep a pointer to the tree we're keepingas an accumulator and then return that tree with the absence of the specified sub-tree?

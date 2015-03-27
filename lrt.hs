@@ -60,7 +60,7 @@ subgraphLookup t bs =
 --  have equal vertices here, and the signatures include the vertices here, so
 --  the signatures cannot be equal.
 -- two trees are only incompatible if either:
---  1) one or them is Nil
+--  1) one of them is Nil
 --  2) their children are incompatible
 --  3) they diverge at the node:
 --      in two exclusive nodes with matching vertices:
@@ -96,10 +96,10 @@ greatestLower l r =
             let (matches, unmatches) = labelMatches lbs rbs
                 merged = map (\ (a, b) -> gl a b) matches
             in Inc l $ unmatches ++ merged
-          gl (Exc l lb) (Inc _ [rb]) = Exc l $ gl lb rb
-          gl (Inc l [lb]) (Exc _ rb) = Exc l $ gl lb rb
-          gl (Exc l lb) (Exc  _ rb) = Exc l $ gl lb rb
-          gl (Inc l []) (Exc _ rb) = Exc l rb
+          gl (Exc l lb)   (Inc _ [rb]) = Exc l $ gl lb rb
+          gl (Inc l [lb]) (Exc _ rb)   = Exc l $ gl lb rb
+          gl (Exc l lb)   (Exc  _ rb)  = Exc l $ gl lb rb
+          gl (Inc l [])   (Exc _ rb)   = Exc l rb
 
 leastUpper l r = 
   if r `compatible` r && all ((== Just Root) . node) [l, r]
@@ -110,10 +110,10 @@ leastUpper l r =
             let (matches, unmatches) = labelMatches lbs rbs
                 merged = map (\ (a, b) -> lu a b) matches
             in Inc l $ merged
-          lu (Exc l lb) (Inc _ [rb]) = Inc l $ [lu lb rb]
-          lu (Inc l [lb]) (Exc _ rb) = Inc l $ [lu lb rb]
-          lu (Exc l lb) (Exc  _ rb) = Exc l $ lu lb rb
-          lu (Inc l []) (Exc _ rb) = Inc l []
+          lu (Exc l lb)   (Inc _ [rb]) = Inc l $ [lu lb rb]
+          lu (Inc l [lb]) (Exc _ rb)   = Inc l $ [lu lb rb]
+          lu (Exc l lb)   (Exc  _ rb)  = Exc l $ lu lb rb
+          lu (Inc l [])   (Exc _ rb)   = Inc l []
 
 labelMatches lbs rbs =
   labelMatchesAux lbs rbs ([], [])
@@ -145,30 +145,13 @@ instance (Ord a) => Monoid (Lrt a) where
   mconcat = foldl mappend mempty
   mappend = greatestLower
 
-{-instance Monad Lrt where
-  (>>=) (Inc Root bs) f = flatten $ map (fmap f) bs
-  (>>=) (Inc (Vertex a) bs) f = mconcat $ (f a):(map (fmap f) (children a))
-  (>>=) (Exc Root b) f = Exc Root $ f b 
-  (>>=) (Exc (Vertex a) b) f = mappend (f a) (fmap f b)
-  (>>=) Nil f = Nil
-  return a = Inc (Vertex a) []
-flatten :: Lrt (Lrt a) -> Lrt a
-flatten Nil = Nil
-flatten (Inc Root []) = Inc Root []
-flatten (Exc t b) =-}
-
 childrenSat env bs = all (\ t -> any (\ c -> c `sat` t) $ children env) bs
 
 sat Nil Nil = True
 sat Nil _ = False
-
 sat env (Inc Root []) = True
-
 sat env (Inc Root bs) = childrenSat env bs
-
 sat env (Inc vert bs) = node env == Just vert && childrenSat env bs
-
 sat (Exc Root lb) (Exc Root rb) = lb `sat` rb
 sat (Exc lv lb) (Exc rv rb) = lv == rv && lb `sat` rb
-
 sat _ _ = False
