@@ -1,6 +1,7 @@
 module Eval where
 import Ast
 import Lrt
+import Debug.Trace
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
@@ -8,16 +9,14 @@ type Tree = Lrt String
 type Map = Map.Map
 type Set = Set.Set
 
-data Env = { facts :: Tree, rules ::  (Map Tree (Set Tree)) }
+data Env = Env { facts :: Tree, rules :: Map Tree (Set Tree) }
 
-eval :: Env -> Stmt -> (Env, Exp)
---eval takes an environment and a statement and returns the updated environment and the result of the statement (query result, success or failure of an assertion, etc.)
-eval env (Assert exp) = case exp of
-  HoistConj _ -> addFact (facts env) (encode exp)
-  Arrow pred consq -> addRule (encode pred) (encode consq)
-eval env (Query exp) = (facts env) `sat` (encode exp) --T/F for now, will add better query support later
-eval env (All exp) = eval env (Query exp)
-eval env (Retract exp) = removeFact env (encode exp)
+emptyEnv = Env (Inc Root []) Map.empty
+
+data Result = Result { env :: Env, result :: Either String [Exp] }
+
+instance Show Result where
+  show (Result env r) = either id (unlines . map display) r
 
 class ELEncodable a where
   encode :: a -> Tree
@@ -26,72 +25,119 @@ class ELDecodable a where
   decode :: Tree -> [a]
 
 instance ELEncodable Term where
-  encode t = case t of
-    Symbol "F" -> Nil
-    Symbol "T" -> Root []
-    Symbol s -> Inc s []
-    Is s t -> Exc s (encode t)
-    Dot s t -> Inc s [encode t]
-
-instance ELDecodable Term where
-  decode t = case t of
-    Root [] -> [Symbol "T"]
-    Nil -> [Symbol "F"]
-    Exc s branch -> [Is s $ decode branch]
-    Inc s branches -> [Dot s (decode b) | b <- branches]
-    Root branches -> map decode branches
+  encode t = 
+    let firstPass = case t of
+          Symbol "F" -> Nil
+          Symbol "T" -> Inc Root []
+          Symbol s -> Inc (Vertex s) []
+          Is s t -> Exc (Vertex s) (encode t)
+          Dot s t -> Inc (Vertex s) [encode t]
+    in case firstPass of
+        Inc Root [] -> Inc Root []
+        Nil -> Nil
+        _ -> Inc Root [firstPass]
 
 instance ELEncodable Conj where
   encode c = case c of
     And lt rt -> greatestLower (encode lt) (encode rt)
     HoistTerm t -> (encode t)
+
+
+instance ELDecodable Term where
+  decode t = case t of
+    Inc Root [] -> [Symbol "T"]
+    Nil -> [Symbol "F"]
+    Exc s branch -> [Is (sym s) t | t <- decode branch]
+    Inc s branches -> concat [[Dot (sym s) t | t <- decode b] | b <- branches]
+    where sym n = case n of
+            Root -> "T"
+            Vertex s -> s
   
 instance ELDecodable Conj where
-  decode t = case t of
-    Inc s [] -> map HoistTerm [Symbol s]
-    Exc s branch -> map HoistTerm [Is s t]
-    Inc s branches -> map HoistTerm [Dot s b | b <- branches]
+  decode lrt = [HoistTerm term | term <- decode lrt]
 
+instance ELDecodable Exp where
+  decode lrt = [HoistConj conj | conj <- decode lrt]
+
+falseExp = HoistConj $ HoistTerm $ Symbol "F"
+trueExp = HoistConj $ HoistTerm $ Symbol "T"
+
+--Handling propositions
+eval env (Assert exp@(HoistConj conj)) =
+  let lrt = encode conj
+      pre = facts env
+      post = greatestLower pre lrt
+  in if post == Nil
+     then Result env $ Left "Did not assert contradiction"
+     else Result env { facts = post } $ Right [exp]
+
+eval env (Retract exp@(HoistConj conj)) =
+  let lrt = encode conj 
+      pre = facts env
+      post = pre `delete` lrt
+  in if not $ pre == post
+     then Result env { facts = post } $ Right [exp]
+     else Result env $ Left "No expression to retract"
+
+eval env (Query exp@(HoistConj conj)) = 
+  if (facts env) |= (encode conj)
+  then Result env $ Right [trueExp]
+  else Result env $ Right [falseExp]
+
+eval env (All exp@(HoistConj conj)) = 
+  let found = find (facts env) (encode conj)
+      exps = found >>= decode
+      result = case exps of
+        [] -> Left "No matches found"
+        _ -> Right exps
+  in Result env result
+  where
+    find lhs rhs =
+      if lhs |= rhs
+      then filter (\ p -> rhs `isPrefixOf` p) (paths lhs)
+      else []
+
+--Handling inference rules
 eval env (Assert (Arrow pred cons)) =
   let predTree = encode pred
       consTree = encode cons
-      consSet = Map.lookup predTree (rules env)
-      postSet = Set.insert consTree consSet
-  in (Env (facts env) Map.insert predTree postSet (rules env), Symbol "T")
-eval env (Assert hoist) =
-  let lrt = encode hoist
-      pre = facts env
-      post = Env (pre `mconcat` lrt) (rules env)
-  in if post == Nil then (env, Nil) else (Env post (rules env), decode lrt)
+      consSet = case Map.lookup predTree (rules env) of
+        Just set -> set
+        Nothing -> Set.empty
+      postConsSet = Set.insert consTree consSet
+      postRules = Map.insert predTree postConsSet (rules env)
+      postEnv = env { rules = postRules }
+  in Result postEnv $ Left "Asserted inference rule"
 
 eval env (Retract (Arrow pred cons)) =
   let predTree = encode pred
       consTree = encode cons
-      consSet = Map.lookup predTree (rules env)
+      consSet = case Map.lookup predTree (rules env) of
+        Just set -> set
+        Nothing -> Set.empty
       postSet = Set.delete consTree consSet
-  in (Env (facts env) Map.insert predTree postSet (rules env), Symbol "T")
-eval env (Retract hoist) =
-  (Env post (rules env), lrt)
-  where lrt = encode hoist
-        pre = facts env
-        post = Env (pre `delete` lrt) (rules env) --TODO: define `delete`. it probably has something to do with `findAll`...
+      postRules = Map.insert predTree postSet (rules env)
+      postEnv = env { rules = postRules }
+  in Result postEnv $ Left "Retracted inference rule"
 
-eval env (Query (Arrow pred _)) =
+eval env (Query (Arrow pred cons)) =
   let predTree = encode pred
-      contains = Map.member predTree (rules env)
-  in if contains
-     then (env, Inc "T" [])
-     else (env, Nil)
-eval env (Query hoist) = 
-  if (facts env) `sat` (encode hoist)
-  then (env, Inc "T" [])
-  else (env, Nil)
-eval env (All exp) = (env, Inc "throw new UnsupportedOperationException(\"well this is awkward\");" [])
+      consTree = encode cons
+      result = case Map.lookup predTree (rules env) of
+        Just set -> 
+          let consList = Set.toList set
+              consConjs = concat $ map decode consList
+          in Right [Arrow pred c | c <- consConjs]
+        Nothing -> Left "No matching inference rule"
+  in Result env result
 
---find :: Lrt a -> Lrt a -> Lrt a 
-find lrt (Symbol s) = --do we have this symbol as a child-node?
-find lrt (Dot s t) = --do we have s as a child-node and can we find t from our s-correspondant?
-find lrt (Is s t) = --do we have s as a child-node and can we find t from our s-correspondant?
+eval env (All (Arrow pred _)) =
+  let predTree = encode pred
+      result = case Map.lookup predTree (rules env) of
+        Just set -> 
+          let consList = Set.toList set 
+              consConjs = consList >>= decode
+          in Right [Arrow pred c | c <- consConjs]
+        Nothing -> Left "No matching inference rule"
+  in Result env result
 
---delete :: Lrt a -> Lrt a -> Lrt a
-delete env term = --similar to find, but we keep a pointer to the tree we're keepingas an accumulator and then return that tree with the absence of the specified sub-tree?

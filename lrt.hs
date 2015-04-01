@@ -1,7 +1,8 @@
 module Lrt where
-import Data.List as List
+import Data.List as List hiding (delete, isPrefixOf)
 import Data.Monoid as Monoid
 import Data.Maybe as Maybe
+import Debug.Trace
 
 data Node a = Root -- used in the top level of the tree
             | Vertex a deriving (Eq, Show)
@@ -87,15 +88,15 @@ compatible l r = r `compatible` l
 --  'greatestLower' or 'leastUpper'
 -- They assume that the two branches in question are compatible and correctly rooted
 --  and that they share a label
+--greatestLower l r | trace ("GREATEST LOWER called on:\n" ++ show l ++ "\n\nAND\n\n" ++ show r ++ "\n") False = undefined
 greatestLower l r =
   if r `compatible` r && all ((== Just Root) . node) [l, r]
   then gl l r
   else Nil
     where gl Nil _ = Nil
-          gl (Inc l lbs) (Inc _ rbs) =
-            let (matches, unmatches) = labelMatches lbs rbs
-                merged = map (\ (a, b) -> gl a b) matches
-            in Inc l $ unmatches ++ merged
+          gl (Inc l lbs) (Inc _ rbs)   = Inc l $ unmatches ++ merged
+            where (matches, unmatches) = labelMatches lbs rbs
+                  merged = map (\ (a, b) -> gl a b) matches
           gl (Exc l lb)   (Inc _ [rb]) = Exc l $ gl lb rb
           gl (Inc l [lb]) (Exc _ rb)   = Exc l $ gl lb rb
           gl (Exc l lb)   (Exc  _ rb)  = Exc l $ gl lb rb
@@ -110,10 +111,10 @@ leastUpper l r =
             let (matches, unmatches) = labelMatches lbs rbs
                 merged = map (\ (a, b) -> lu a b) matches
             in Inc l $ merged
-          lu (Exc l lb)   (Inc _ [rb]) = Inc l $ [lu lb rb]
-          lu (Inc l [lb]) (Exc _ rb)   = Inc l $ [lu lb rb]
-          lu (Exc l lb)   (Exc  _ rb)  = Exc l $ lu lb rb
+          lu (Inc l [lb]) (Exc _ rb)   = Inc l [lu lb rb]
           lu (Inc l [])   (Exc _ rb)   = Inc l []
+          lu (Exc l lb)   (Inc _ [rb]) = Inc l [lu lb rb]
+          lu (Exc l lb)   (Exc  _ rb)  = Exc l $ lu lb rb
 
 labelMatches lbs rbs =
   labelMatchesAux lbs rbs ([], [])
@@ -140,18 +141,104 @@ instance Functor Lrt where
   fmap f (Exc a b) = Exc (fmap f a) $ (fmap f) b
   fmap f (Inc a bs) = Inc (fmap f a) $ map (fmap f) bs
 
-instance (Ord a) => Monoid (Lrt a) where
+instance (Ord a, Show a) => Monoid (Lrt a) where
   mempty = Inc Root []
   mconcat = foldl mappend mempty
   mappend = greatestLower
 
-childrenSat env bs = all (\ t -> any (\ c -> c `sat` t) $ children env) bs
+childrenSat lrt bs = all (\ t -> any (\ c -> c `sat` t) $ children lrt) bs
 
+--sat l r | trace ("SAT called on:\n" ++ show l ++ "\n\nAND\n\n" ++ show r ++ "\n") False = undefined
 sat Nil Nil = True
 sat Nil _ = False
-sat env (Inc Root []) = True
-sat env (Inc Root bs) = childrenSat env bs
-sat env (Inc vert bs) = node env == Just vert && childrenSat env bs
+sat _ Nil = False
+sat lrt (Inc Root []) = True
+sat lrt (Inc Root bs) = childrenSat lrt bs
+sat lrt (Inc vert bs) = node lrt == Just vert && childrenSat lrt bs
 sat (Exc Root lb) (Exc Root rb) = lb `sat` rb
 sat (Exc lv lb) (Exc rv rb) = lv == rv && lb `sat` rb
 sat _ _ = False
+
+(|=) model exp | model == Nil = True
+               | otherwise = sat model exp
+
+paths :: Lrt a -> [Lrt a]
+paths Nil = [Nil]
+paths (Inc n []) = [Inc n []]
+paths (Inc n bs) = 
+  let branchPaths = map paths bs
+      flattened = concat branchPaths
+  in map (\ p -> Inc n [p]) $ flattened
+paths (Exc n b) = [Exc n p | p <- paths b]
+    
+isPrefixOf (Inc l [])   (Inc r _)    | l == r = True
+isPrefixOf (Inc l [])   (Exc r _)    | l == r = True
+isPrefixOf (Inc l [lb]) (Inc r [rb]) | l == r = lb `isPrefixOf` rb
+isPrefixOf (Exc l lb)   (Exc r rb)   | l == r = lb `isPrefixOf` rb
+isPrefixOf Nil Nil = True
+isPrefixOf _ _ = False
+
+--this is a stupid way of implementing this; there should be a way to find matches and just, not copy them
+delete l r =
+  let rps = paths r
+      lps = paths l
+      dps = filter (\ lp -> not $ any (\ rp -> rp `isPrefixOf` lp) rps) lps
+  in mconcat dps
+
+a = (Inc Root 
+      [
+        Inc (Vertex 1) [
+          Exc (Vertex 3)
+            (Inc Root [])
+        ]
+      , Inc (Vertex 2) [
+          Inc (Vertex 4) [
+            Inc (Vertex 5) 
+              [
+                Inc (Vertex 6) []
+              , Inc (Vertex 7) []
+              ]
+
+          ]
+        ]
+      ])
+
+b = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [ Inc (Vertex 5) []
+            , Inc (Vertex 6) []
+            , Inc (Vertex 7) []
+            , Inc (Vertex 8) []
+            ])
+        ]
+      ]))
+
+c = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [])
+        ]
+      ]))
+
+d = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [ Inc (Vertex 5) []
+            , Inc (Vertex 6) []
+            ])
+        ]
+      ]))
+
+--find _ Nil = Nil
+--find Nil _ = Nil
+--find env (Inc Root []) = (Inc Root [])
+--find env (Inc Root bs) = map (\ b -> (Inc Root [Lrt.find env b])) bs
+--find env exc@(Exc Root _) = if env `sat` exc then exc else Nil
+
