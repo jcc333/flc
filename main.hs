@@ -26,4 +26,4 @@ repl state = readPrompt "?- " >>= \ input ->
   then return ()
   else let stmt = parseString input 
            result = eval state stmt
-       in putStr (show result) >> repl (env result)
+       in putStrLn (show result) >> repl (env result)
