@@ -2,6 +2,8 @@ module Lrt where
 import Data.List as List hiding (delete, isPrefixOf)
 import Data.Monoid as Monoid
 import Data.Maybe as Maybe
+import Debug.Trace
+import Text.Printf
 
 data Node a = Root -- used in the top level of the tree
             | Vertex a deriving (Eq, Show)
@@ -180,14 +182,103 @@ isPrefixOf _ _ = False
 
 --this is a stupid way of implementing this; there should be a way to find matches and just, not copy them
 delete l r =
-  let rps = paths r
-      lps = paths l
-      dps = filter (\ lp -> not $ any (\ rp -> rp `isPrefixOf` lp) rps) lps
+  let lps = trace ((show (length (paths l))) ++ " PATHS:\n" ++ (unlines (map show (paths l)))) (paths l)
+      dps = filter (\ lp -> not $ lp `requires` r) lps
   in mconcat dps
 
---find _ Nil = Nil
---find Nil _ = Nil
---find env (Inc Root []) = (Inc Root [])
---find env (Inc Root bs) = map (\ b -> (Inc Root [Lrt.find env b])) bs
---find env exc@(Exc Root _) = if env `sat` exc then exc else Nil
+-- deletion from an lrt
+-- each lrt ends in terminals, T :: Inc (Node a) [] | Nil
+-- deleting Nil-terminated branches requires deleting their dependent branches
+{-
 
+DELETION:
+given an environment tree: (ENV) and a deletion tree (DEL), copy ENV except for each branch B of ENV | B requires a terminal in DEL.
+-}
+requires l r | (trace (printf "\nREQUIRES CALL:\n\t%s\n\t%s\n" (show l) (show r)) False) = undefined
+requires l r | node l /= node r  = False
+requires (Inc _ _)   (Inc _ [])  = True
+requires (Inc _ _)   (Exc _ _)   = False
+requires (Exc _ _)   (Inc _ _)   = False
+requires (Exc _ lb)  (Exc _ rb)  = lb `requires` rb
+requires (Inc _ lbs) (Inc _ rbs) =
+  let (matches, unmatches) = labelMatches lbs rbs
+  in matches /= [] && all (uncurry requires) matches
+
+--delete (Inc Root bs) del = Inc Root $ map checkBranch rem
+--  where rem = filter (\ b -> not $ b `requires` del)
+--        --something?
+  
+
+
+a = (Inc Root 
+      [
+        Inc (Vertex 1) [
+          Exc (Vertex 3)
+            (Inc Root [])
+        ]
+      , Inc (Vertex 2) [
+          Inc (Vertex 4) [
+            Inc (Vertex 5) 
+              [
+                Inc (Vertex 6) []
+              , Inc (Vertex 7) []
+              ]
+
+          ]
+        ]
+      ])
+
+b = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [ Inc (Vertex 5) []
+            , Inc (Vertex 6) []
+            , Inc (Vertex 7) []
+            , Inc (Vertex 8) []
+            ])
+        ]
+      ]))
+
+c = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [ Inc (Vertex 5) []
+            , Inc (Vertex 6) []
+            ])
+        ]
+      ]))
+
+d = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [ Inc (Vertex 7) []
+            , Inc (Vertex 8) []
+            ])
+        ]
+      ]))
+
+e = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [])
+        ]
+      ]))
+
+f = (Exc Root 
+      (Inc (Vertex 1) [
+        Inc (Vertex 2) [
+          Exc (Vertex 3)
+            (Inc (Vertex 4) 
+            [ Inc (Vertex 5) []
+            , Inc (Vertex 6) []
+            ])
+        ]
+      ]))
