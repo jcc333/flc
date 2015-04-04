@@ -25,17 +25,18 @@ class ELDecodable a where
   decode :: Tree -> [a]
 
 instance ELEncodable Term where
-  encode t = 
-    let firstPass = case t of
+  encode term = 
+    let firstPass t = case t of
           Symbol "F" -> Nil
           Symbol "T" -> Inc Root []
-          Symbol s -> Inc (Vertex s) []
-          Is s t -> Exc (Vertex s) (encode t)
-          Dot s t -> Inc (Vertex s) [encode t]
-    in case firstPass of
+          Symbol sym -> Inc (Vertex sym) []
+          Is sym tail -> Exc (Vertex sym) (firstPass tail)
+          Dot sym tail -> Inc (Vertex sym) [firstPass tail]
+        termPass = firstPass term
+    in case termPass of
         Inc Root [] -> Inc Root []
         Nil -> Nil
-        _ -> Inc Root [firstPass]
+        _ -> Inc Root [termPass]
 
 instance ELEncodable Conj where
   encode c = case c of
@@ -67,9 +68,9 @@ eval env (Assert exp@(HoistConj conj)) =
   let lrt = encode conj
       pre = facts env
       post = greatestLower pre lrt
-  in if post == Nil
-     then Result env $ Left "Did not assert contradiction"
-     else Result env { facts = post } $ Right [exp]
+  in if pre `compatible` lrt
+     then Result env { facts = post } $ Right [exp]
+     else Result env $ Left "Did not assert contradiction"
 
 eval env (Retract exp@(HoistConj conj)) =
   let lrt = encode conj 
