@@ -60,11 +60,17 @@ instance ELDecodable Conj where
 instance ELDecodable Exp where
   decode lrt = [HoistConj conj | conj <- decode lrt]
 
-falseExp = HoistConj $ HoistTerm $ Symbol "F"
-trueExp = HoistConj $ HoistTerm $ Symbol "T"
+eval env (Assert   exp@(HoistConj conj)) = assertFact env exp conj
+eval env (Retract  exp@(HoistConj conj)) = retractFact env exp conj
+eval env (Query    exp@(HoistConj conj)) = queryFact env exp conj
+eval env (All      exp@(HoistConj conj)) = allFacts env exp conj
+eval env (Assert  (Arrow pred cons)) = assertArrow env pred cons
+eval env (Retract (Arrow pred cons)) = retractArrow env pred cons
+eval env (Query   (Arrow pred cons)) = queryArrow env pred cons
+eval env (All     (Arrow pred _)) = allArrows env pred
 
 --Handling propositions
-eval env (Assert exp@(HoistConj conj)) =
+assertFact env exp conj =
   let lrt = encode conj
       pre = facts env
       post = greatestLower pre lrt
@@ -72,7 +78,7 @@ eval env (Assert exp@(HoistConj conj)) =
      then Result env { facts = post } $ Right [exp]
      else Result env $ Left "Did not assert contradiction"
 
-eval env (Retract exp@(HoistConj conj)) =
+retractFact env exp conj =
   let lrt = encode conj 
       pre = facts env
       post = pre `delete` lrt
@@ -80,12 +86,12 @@ eval env (Retract exp@(HoistConj conj)) =
      then Result env { facts = post } $ Right [exp]
      else Result env $ Left "No expression to retract"
 
-eval env (Query exp@(HoistConj conj)) = 
+queryFact env exp conj =
   if (facts env) |= (encode conj)
   then Result env $ Right [trueExp]
   else Result env $ Right [falseExp]
 
-eval env (All exp@(HoistConj conj)) = 
+allFacts env exp conj =
   let found = find (facts env) (encode conj)
       exps = found >>= decode
       result = case exps of
@@ -99,7 +105,7 @@ eval env (All exp@(HoistConj conj)) =
       else []
 
 --Handling inference rules
-eval env (Assert (Arrow pred cons)) =
+assertArrow env pred cons =
   let predTree = encode pred
       consTree = encode cons
       consSet = case Map.lookup predTree (rules env) of
@@ -110,7 +116,7 @@ eval env (Assert (Arrow pred cons)) =
       postEnv = env { rules = postRules }
   in Result postEnv $ Left "Asserted inference rule"
 
-eval env (Retract (Arrow pred cons)) =
+retractArrow env pred cons =
   let predTree = encode pred
       consTree = encode cons
       consSet = case Map.lookup predTree (rules env) of
@@ -121,7 +127,7 @@ eval env (Retract (Arrow pred cons)) =
       postEnv = env { rules = postRules }
   in Result postEnv $ Left "Retracted inference rule"
 
-eval env (Query (Arrow pred cons)) =
+queryArrow env pred cons =
   let predTree = encode pred
       consTree = encode cons
       result = case Map.lookup predTree (rules env) of
@@ -132,7 +138,7 @@ eval env (Query (Arrow pred cons)) =
         Nothing -> Left "No matching inference rule"
   in Result env result
 
-eval env (All (Arrow pred _)) =
+allArrows env pred =
   let predTree = encode pred
       result = case Map.lookup predTree (rules env) of
         Just set -> 
@@ -141,4 +147,7 @@ eval env (All (Arrow pred _)) =
           in Right [Arrow pred c | c <- consConjs]
         Nothing -> Left "No matching inference rule"
   in Result env result
+
+falseExp = HoistConj $ HoistTerm $ Symbol "F"
+trueExp = HoistConj $ HoistTerm $ Symbol "T"
 
