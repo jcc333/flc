@@ -3,6 +3,7 @@ import Data.List as List hiding (delete, isPrefixOf)
 import Data.Monoid as Monoid
 import Data.Maybe as Maybe
 import Debug.Trace
+import Text.Printf
 
 data Node a = Root -- used in the top level of the tree
             | Vertex a deriving (Eq, Show)
@@ -15,6 +16,20 @@ data Lrt a = Inc (Node a) [Lrt a]
            | Exc (Node a) (Lrt a)
            | Nil
            deriving (Eq, Show)
+
+fmtTree lrt =
+  let unwrapped = case lrt of
+        Inc Root [] -> [lrt]
+        Nil -> [lrt]
+        _ -> children lrt
+  in concat $ map (\ lrt -> (unlines $ (map formatPath) $ (paths lrt))) unwrapped
+    where formatPath p = case p of
+            Inc Root [b] -> fmtTree b
+            Inc Root [] -> "T"
+            Inc (Vertex s) [] -> printf "%s" s
+            Inc (Vertex s) [b] -> printf "%s . %s " s $ fmtTree b
+            Nil -> "F"
+            Exc (Vertex s) b -> printf "%s : %s " s $ fmtTree b
 
 node (Inc n _) = Just n
 node (Exc n _) = Just n
@@ -148,12 +163,13 @@ instance (Ord a, Show a) => Monoid (Lrt a) where
 
 childrenSat lrt bs = all (\ t -> any (\ c -> c `sat` t) $ children lrt) bs
 
---sat l r | trace ("SAT called on:\n" ++ show l ++ "\n\nAND\n\n" ++ show r ++ "\n") False = undefined
-sat Nil Nil = True
-sat Nil _ = False
-sat _ Nil = False
-sat lrt (Inc Root []) = True
+sat l r | trace ("SAT called on:\n" ++ fmtTree l ++ show l ++ "\n\nAND\n\n" ++ fmtTree r ++ show r ++ "\n") False = undefined
+sat Nil r = Nil == r
 sat lrt (Inc Root bs) = childrenSat lrt bs
+sat (Exc lv lb) (Inc rv bs) = lv == rv && case bs of
+  [] -> True
+  [rb] -> lb `sat` rb
+  _ -> False
 sat lrt (Inc vert bs) = node lrt == Just vert && childrenSat lrt bs
 sat (Exc Root lb) (Exc Root rb) = lb `sat` rb
 sat (Exc lv lb) (Exc rv rb) = lv == rv && lb `sat` rb
