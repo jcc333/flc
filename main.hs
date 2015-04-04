@@ -1,7 +1,6 @@
 module Main where
 import Ast
 import Eval
---import Lrt
 import Parse
 import Control.Monad
 import Data.IORef
@@ -21,9 +20,11 @@ readPrompt prompt = flushStr prompt >> getLine
 flushStr str = putStr str >> hFlush stdout
 
 repl :: Env -> IO ()
-repl state = readPrompt "?- " >>= \ input ->
-  if input == "quit"
-  then return ()
-  else let stmt = parseString input 
-           result = eval state stmt
-       in putStrLn (show result) >> repl (env result)
+repl state =
+  do
+    input <- readPrompt "?- "
+    if input == "quit"
+      then return ()
+      else let stmt = parseString input
+               result = eval state stmt
+           in putStrLn (format result) >> repl (env result)

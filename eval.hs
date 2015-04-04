@@ -1,7 +1,6 @@
 module Eval where
 import Ast
 import Lrt
-import Debug.Trace
 import qualified Data.Set as Set
 import qualified Data.Map as Map
 
@@ -9,14 +8,13 @@ type Tree = Lrt String
 type Map = Map.Map
 type Set = Set.Set
 
-data Env = Env { facts :: Tree, rules :: Map Tree (Set Tree) }
+data Env = Env { facts :: Tree, rules :: Map Tree (Set Tree) } deriving Show
 
 emptyEnv = Env (Inc Root []) Map.empty
 
-data Result = Result { env :: Env, result :: Either String [Exp] }
+data Result = Result { env :: Env, result :: Either String [Exp] } deriving Show
 
-instance Show Result where
-  show (Result env r) = either id (unlines . map display) r
+format (Result env r) = either id (unlines . map display) r
 
 class ELEncodable a where
   encode :: a -> Tree
@@ -74,9 +72,10 @@ assertFact env exp conj =
   let lrt = encode conj
       pre = facts env
       post = greatestLower pre lrt
-  in if pre `compatible` lrt
-     then Result env { facts = post } $ Right [exp]
-     else Result env $ Left "Did not assert contradiction"
+      result = if pre `compatible` lrt
+               then Result env { facts = post } $ Right [exp]
+               else Result env $ Left "Did not assert contradiction"
+  in result
 
 retractFact env exp conj =
   let lrt = encode conj 
