@@ -143,6 +143,7 @@ instance Functor Lrt where
   fmap f (Exc a b) = Exc (fmap f a) $ (fmap f) b
   fmap f (Inc a bs) = Inc (fmap f a) $ map (fmap f) bs
 
+
 instance (Ord a, Show a) => Monoid (Lrt a) where
   mempty = Inc Root []
   mconcat = foldl mappend mempty
@@ -180,21 +181,9 @@ isPrefixOf (Exc l lb)   (Exc r rb)   | l == r = lb `isPrefixOf` rb
 isPrefixOf Nil Nil = True
 isPrefixOf _ _ = False
 
---this is a stupid way of implementing this; there should be a way to find matches and just, not copy them
-delete l r =
-  let lps = trace ((show (length (paths l))) ++ " PATHS:\n" ++ (unlines (map show (paths l)))) (paths l)
-      dps = filter (\ lp -> not $ lp `requires` r) lps
-  in mconcat dps
-
 -- deletion from an lrt
 -- each lrt ends in terminals, T :: Inc (Node a) [] | Nil
 -- deleting Nil-terminated branches requires deleting their dependent branches
-{-
-
-DELETION:
-given an environment tree: (ENV) and a deletion tree (DEL), copy ENV except for each branch B of ENV | B requires a terminal in DEL.
--}
-requires l r | (trace (printf "\nREQUIRES CALL:\n\t%s\n\t%s\n" (show l) (show r)) False) = undefined
 requires l r | node l /= node r  = False
 requires (Inc _ _)   (Inc _ [])  = True
 requires (Inc _ _)   (Exc _ _)   = False
@@ -204,11 +193,29 @@ requires (Inc _ lbs) (Inc _ rbs) =
   let (matches, unmatches) = labelMatches lbs rbs
   in matches /= [] && all (uncurry requires) matches
 
---delete (Inc Root bs) del = Inc Root $ map checkBranch rem
---  where rem = filter (\ b -> not $ b `requires` del)
---        --something?
-  
+terminal path = case path of
+  Inc _ [] -> path
+  Inc _ [b] -> terminal b
+  Exc _ b | terminal b == b -> path
+  Exc n b -> terminal b
+  Nil -> Nil
 
+removeTerminal p =
+  let t = terminal p
+  in removeTerminal' p t
+  where removeTerminal' p t | p == t = Nothing
+        removeTerminal' p t = Just $ removeTerminal'' p t
+        removeTerminal'' p t =
+          case p of
+            Inc n [b] | b == t -> Inc n []
+            Inc n [b] -> Inc n [removeTerminal'' b t]
+            Exc n b -> Exc n $ removeTerminal'' b t
+
+delete env del =
+  let ps = paths env
+      (reqs, nonreqs) = partition (requires del) ps
+      post = catMaybes $ map removeTerminal reqs
+  in mconcat $ nonreqs ++ post
 
 a = (Inc Root 
       [
