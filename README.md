@@ -1,9 +1,10 @@
 Exclusion Logic in Haskell
 ==========================
 
-- Exclusion logic is an alternative deontic logic Richard Evans at Maxis as written about
+- Exclusion logic is an alternative deontic logic Richard Evans at Maxis has written about
 - It relies on strategically impoverishing the operators in the language to attain some performance benefits and computability while attempting to minimize the loss of expressivity
 - Namely, it does away with 'or' and the 'not' we're used to
+- Slightly more subtly, EL also restricts the class of inference rules we can create by syntactically eliminating recursive inference rules as invalid (no ` a -> (b -> c)` forward chain rules)
 - In return, it adds two operators 'such that', and 'is only' (`.` and `:` in our case)
 - Exclusion logic (EL) is cool
 - I'd like to create a fast, flexible distributed database for hierarchical metadata
