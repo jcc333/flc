@@ -1,5 +1,6 @@
 module Parse where
 import Ast
+import Control.Applicative hiding ((<|>))
 import Control.Monad
 import Data.List hiding (all)
 import Prelude hiding (all)
@@ -59,13 +60,11 @@ andConj = do
   rhs <- term
   return $ And lhs rhs
 
-hoistTerm = do
-  t <- term
-  return $ HoistTerm t
+hoistTerm = HoistTerm <$> term
 
 conj = try andConj <|> hoistTerm
 
-hoistConj = conj >>= \ c -> return $ HoistConj c
+hoistConj = HoistConj <$> conj
 
 arrow = do
   lhs <- conj
@@ -75,24 +74,13 @@ arrow = do
 
 elExp = try arrow <|> hoistConj
 
-assert = do
-  reserved "assert"
-  e <- elExp
-  return $ Assert e
+assert = reserved "assert" >> Assert <$> elExp
 
-retract = do
-  reserved "retract"
-  e <- elExp
-  return $ Retract e
+retract = reserved "retract" >> Retract <$> elExp
 
-all = do
-  reserved "all"
-  e <- elExp
-  return $ All e
+all = reserved "all" >> All <$> elExp
 
-query = do
-  e <- elExp
-  return $ Query e
+query = Query <$> elExp
 
 statement = assert <|> retract <|> all <|> query
 
