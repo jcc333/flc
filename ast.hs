@@ -1,6 +1,9 @@
 module Ast where
+import Data.List
 
 data Term = Symbol String
+          | Vector [Term]
+          | Dict [(Term, Term)]
           | Dot String Term
           | Is String Term
           deriving (Eq, Show)
@@ -24,9 +27,17 @@ class Display a where
 
 instance Display Term where
   display t = case t of
-    Symbol s -> s
     Dot s t -> s ++ "." ++ display t
     Is s t -> s ++ ":" ++ display t
+    Symbol s -> s
+    Vector ss ->
+      let sStrs = map display ss
+          contents = concat $ intersperse "," sStrs
+      in "[" ++ contents ++ "]"
+    Dict kvs ->
+      let kvStrs = map (\(k,v) -> display k ++ " : "  ++ display v) kvs
+          contents = concat $ intersperse ", " kvStrs
+      in "{" ++ contents ++ "}"
 
 instance Display Conj where
   display c = case c of
