@@ -25,16 +25,19 @@ class ELDecodable a where
 instance ELEncodable Term where
   encode term = 
     let firstPass t = case t of
-          Symbol "F" -> Nil
-          Symbol "T" -> Inc Root []
-          Symbol sym -> Inc (Vertex sym) []
-          Is sym tail -> Exc (Vertex sym) (firstPass tail)
-          Dot sym tail -> Inc (Vertex sym) [firstPass tail]
+          Symbol "F" -> [Nil]
+          Symbol "T" -> [Inc Root []]
+          Symbol sym -> [Inc (Vertex sym) []]
+          Is sym tail -> let [tailTree] = firstPass tail
+                         in [Exc (Vertex sym) tailTree]
+          Dot sym tail -> [Inc (Vertex sym) (firstPass tail)]
+          Vector ts -> map encode ts
+          Dict ps -> map (\ (k,v) -> Exc (Vertex k) (head (firstPass v))) ps
         termPass = firstPass term
     in case termPass of
-        Inc Root [] -> Inc Root []
-        Nil -> Nil
-        _ -> Inc Root [termPass]
+        [Inc Root []] -> Inc Root []
+        [Nil] -> Nil
+        _ -> Inc Root termPass
 
 instance ELEncodable Conj where
   encode c = case c of

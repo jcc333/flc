@@ -3,7 +3,7 @@ import Data.List
 
 data Term = Symbol String
           | Vector [Term]
-          | Dict [(Term, Term)]
+          | Dict [(String, Term)]
           | Dot String Term
           | Is String Term
           deriving (Eq, Show)
@@ -31,11 +31,10 @@ instance Display Term where
     Is s t -> s ++ ":" ++ display t
     Symbol s -> s
     Vector ss ->
-      let sStrs = map display ss
-          contents = concat $ intersperse "," sStrs
+      let contents = concat $ intersperse "," $ map display ss
       in "[" ++ contents ++ "]"
     Dict kvs ->
-      let kvStrs = map (\(k,v) -> display k ++ " : "  ++ display v) kvs
+      let kvStrs = map (\(k,v) -> k ++ " : "  ++ display v) kvs
           contents = concat $ intersperse ", " kvStrs
       in "{" ++ contents ++ "}"
 

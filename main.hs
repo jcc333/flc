@@ -20,11 +20,10 @@ readPrompt prompt = flushStr prompt >> getLine
 flushStr str = putStr str >> hFlush stdout
 
 repl :: Env -> IO ()
-repl state =
-  do
-    input <- readPrompt "?- "
-    if input == "quit"
-      then return ()
-      else let stmt = parseString input
-               result = eval state stmt
-           in putStrLn (format result) >> repl (env result)
+repl state = do
+  input <- readPrompt "?- "
+  if input == "quit"
+    then return ()
+    else let stmt = parseString input
+             result = eval state stmt
+         in putStrLn (format result) >> repl (env result)

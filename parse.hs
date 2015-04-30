@@ -1,11 +1,11 @@
 module Parse where
 import Ast
-import Control.Applicative hiding ((<|>))
+import Control.Applicative
 import Control.Monad
 import Data.List hiding (all)
 import Prelude hiding (all)
 import System.IO
-import Text.ParserCombinators.Parsec
+import Text.ParserCombinators.Parsec hiding ((<|>), many)
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
@@ -32,16 +32,29 @@ reserved = Token.reserved lexer
 reservedOp = Token.reservedOp lexer
 whiteSpace = Token.whiteSpace lexer
 semi = Token.semi lexer
+comma = Token.comma lexer
 braces = Token.braces lexer
 brackets = Token.brackets lexer
 
-simpleSymbol = identifier >>= \ id -> return $ Symbol id
+symbol = Symbol <$> identifier
 
-complexSymbol = braces $ sepBy1 identifier spaces >>= \ ids -> return $ Symbol $ unwords ids
+vector = do
+  char '['
+  ts <- sepBy term comma
+  char ']'
+  return $ Vector ts
 
-varSymbol = brackets $ sepBy1 identifier spaces >>= \ ids -> return $ Symbol $ "[" ++ unwords ids ++ "]"
-
-symbol = try complexSymbol <|> simpleSymbol <|> varSymbol
+dict = 
+  let pair = do
+        Symbol k <- symbol
+        char ':'
+        v <- term
+        return $ (k, v)
+  in do
+    char '{'
+    pairs <- sepBy pair comma
+    char '}'
+    return $ Dict pairs
 
 chainedTerm = do 
   Symbol lhs <- symbol
@@ -52,7 +65,7 @@ chainedTerm = do
       '.' -> Dot lhs rhs
       ':' -> Is lhs rhs
 
-term = whiteSpace >> (try chainedTerm <|> symbol)
+term = whiteSpace >> (try chainedTerm <|> vector <|> dict <|> symbol)
 
 andConj = do
   lhs <- term
