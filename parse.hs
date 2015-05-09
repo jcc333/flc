@@ -1,11 +1,11 @@
 module Parse where
 import Ast
-import Control.Applicative
+import Control.Applicative hiding ((<|>))
 import Control.Monad
 import Data.List hiding (all)
 import Prelude hiding (all)
 import System.IO
-import Text.ParserCombinators.Parsec hiding ((<|>), many)
+import Text.ParserCombinators.Parsec hiding (many)
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
@@ -16,7 +16,7 @@ languageDef =
             , Token.commentEnd     = "*/"
             , Token.commentLine    = "//"
             , Token.identStart     = alphaNum <|> oneOf "_"
-            , Token.identLetter    = alphaNum <|> oneOf "+_-=,?/'`!@#$%^&*~"
+            , Token.identLetter    = alphaNum <|> oneOf "+_-=?/'`!@#$%^&*~"
             , Token.reservedNames  =
               [ "assert"
               , "retract"
@@ -52,7 +52,7 @@ dict =
         return $ (k, v)
   in do
     char '{'
-    pairs <- sepBy pair comma
+    pairs <- sepBy pair (comma >> whiteSpace)
     char '}'
     return $ Dict pairs
 
