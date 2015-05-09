@@ -3,6 +3,7 @@ import Ast
 import Lrt
 import qualified Data.Set as Set
 import qualified Data.Map as Map
+import Debug.Trace
 
 type Tree = Lrt String
 type Map = Map.Map
@@ -31,7 +32,7 @@ instance ELEncodable Term where
           Is sym tail -> let [tailTree] = firstPass tail
                          in [Exc (Vertex sym) tailTree]
           Dot sym tail -> [Inc (Vertex sym) (firstPass tail)]
-          Vector ts -> map encode ts
+          Vector ts -> concatMap firstPass ts
           Dict ps -> map (\ (k,v) -> Exc (Vertex k) (head (firstPass v))) ps
         termPass = firstPass term
     in case termPass of
